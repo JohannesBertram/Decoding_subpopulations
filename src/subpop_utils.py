@@ -351,6 +351,20 @@ def procrustes_r2(coords_ref, coords_sub):
     return 1.0 - disparity
 
 
+def procrustes_forms(coords_ref, coords_sub):
+    """R^2, Frobenius distance, and geodesic angle from the same Procrustes alignment.
+
+    scipy's procrustes standardises both configurations to unit Frobenius norm,
+    so disparity = ||X - YR||_F^2 = 2 - 2*sum(sv), and the angular (geodesic)
+    Procrustes distance is arccos(sum(sv)) = arccos(1 - disparity/2). R^2 alone
+    compresses differences near ceiling; d_frob/theta_deg are more sensitive there.
+    """
+    r2 = procrustes_r2(coords_ref, coords_sub)
+    disp = 1.0 - r2
+    return dict(r2=float(r2), d_frob=float(np.sqrt(max(disp, 0.0))),
+                theta_deg=float(np.degrees(np.arccos(np.clip(1 - disp / 2, -1, 1)))))
+
+
 def rdm_correlation(tensor4d_ref, tensor4d_sub):
     """Spearman rank correlation between full-pop and subpop RDMs.
 
@@ -1471,7 +1485,7 @@ def variance_reproduced(tensor4d_ref, tensor4d_sub, n_components=3):
 # ── E. DSA (Dynamical Similarity Analysis) ───────────────────────────────────
 
 def compute_dsa(tensor_full, tensor_sub, n_components=15, neuron_idx=None,
-                n_shuffles=10, rng_seed=0, ref_z=None):
+                n_shuffles=10, rng_seed=0, ref_z=None, lamb=None):
     """DSA similarity as a normalised z-score.
 
     Raw z-score:
@@ -1487,6 +1501,11 @@ def compute_dsa(tensor_full, tensor_sub, n_components=15, neuron_idx=None,
     n_shuffles   : int  — temporal shuffles for baseline
     neuron_idx   : ignored (API compatibility)
     ref_z        : float or None
+    lamb         : float or None
+        Tikhonov (ridge) regularisation of the DMD least-squares solve. ``None``
+        leaves the ``dsa-analysis`` default in place, which is ``lamb = 0`` — i.e.
+        the published results are unregularised unless an explicit value is
+        passed here to reproduce the regularisation-sweep robustness check.
     """
     try:
         from DSA import DSA as _DSA_cls
@@ -1519,17 +1538,18 @@ def compute_dsa(tensor_full, tensor_sub, n_components=15, neuron_idx=None,
 
         n_delays = min(T // 2, 20)
         rank     = min(nc * n_delays, nc * 2)
+        dsa_kw   = dict(n_delays=n_delays, rank=rank)
+        if lamb is not None:
+            dsa_kw['lamb'] = lamb
 
-        dist_raw = float(_DSA_cls(data_full, data_sub,
-                                  n_delays=n_delays, rank=rank).fit_score())
+        dist_raw = float(_DSA_cls(data_full, data_sub, **dsa_kw).fit_score())
 
         dist_shuf = []
         for _ in range(n_shuffles):
             shuf = data_sub.copy()
             for c in range(n_cond):
                 shuf[c] = shuf[c][rng.permutation(T)]
-            dist_shuf.append(float(_DSA_cls(data_full, shuf,
-                                            n_delays=n_delays, rank=rank).fit_score()))
+            dist_shuf.append(float(_DSA_cls(data_full, shuf, **dsa_kw).fit_score()))
 
         mean_shuf = float(np.mean(dist_shuf))
         std_shuf  = float(np.std(dist_shuf))

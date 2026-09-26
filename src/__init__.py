@@ -1,4 +1,4 @@
-"""FNN_Manifolds shared analysis package.
+"""Shared analysis package for the decoding-subpopulations project.
 
 Import everything from submodules so notebooks can do::
 

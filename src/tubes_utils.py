@@ -668,7 +668,7 @@ def plot_scenario_overview_proper(curves_raw, curves_processed, results, labels,
     from tueplots.constants.color import rgb
 
     if True:
-    #with plt.rc_context({**bundles.neurips2024(), **axes.lines()}):
+    #with plt.rc_context({**bundles.iclr2024(), **axes.lines()}):
         fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111)
         
